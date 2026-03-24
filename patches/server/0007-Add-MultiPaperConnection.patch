@@ -143,18 +143,22 @@ index 0000000000000000000000000000000000000000..784ed3647536dae2ea02494aca8a9e68
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBoundProtocol;
 +import puregero.multipaper.mastermessagingprotocol.messages.masterbound.PingMessage;
++import puregero.multipaper.mastermessagingprotocol.messages.serverbound.RedirectToLeaderMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessageHandler;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
 +import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerInfoUpdateMessage;
 +
++import java.util.List;
 +import java.util.Map;
 +import java.util.Set;
 +import java.util.UUID;
 +import java.util.concurrent.CompletableFuture;
 +import java.util.concurrent.ConcurrentHashMap;
 +import java.util.concurrent.TimeUnit;
++import java.util.concurrent.atomic.AtomicInteger;
 +import java.util.function.Consumer;
++import java.util.stream.Collectors;
 +
 +@ChannelHandler.Sharable
 +public class MultiPaperConnection extends ServerBoundMessageHandler {
@@ -170,6 +174,8 @@ index 0000000000000000000000000000000000000000..784ed3647536dae2ea02494aca8a9e68
 +    private long lastPingReceived;
 +    private final Set<MasterBoundMessage> unhandledRequests = ConcurrentHashMap.newKeySet();
 +    private final Map<String, ExternalServer> serversMap = new ConcurrentHashMap<>();
++    private final AtomicInteger masterIndex = new AtomicInteger(0);
++    private volatile String redirectTarget = null;
 +
 +    public MultiPaperConnection() {
 +        System.setProperty("multipaper.netty.threads", System.getProperty("multipaper.netty.threads", Integer.toString(Math.min(Runtime.getRuntime().availableProcessors(), 3))));
@@ -179,13 +185,29 @@ index 0000000000000000000000000000000000000000..784ed3647536dae2ea02494aca8a9e68
 +        connect();
 +    }
 +
++    private List<String> getMasterAddresses() {
++        MultiPaperConfiguration.MasterConnection mc = MultiPaperConfiguration.get().masterConnection;
++        if (mc.replicationEnabled && !mc.masters.isEmpty()) {
++            return mc.masters.stream().map(e -> e.host).collect(Collectors.toList());
++        }
++        return List.of(mc.masterAddress);
++    }
++
 +    public void connect() {
-+        String server = MultiPaperConfiguration.get().masterConnection.masterAddress;
-+        LOGGER.info("Connecting to " + server + "...");
-+        String[] serverParts = server.split(":");
++        String target;
++        if (redirectTarget != null) {
++            target = redirectTarget;
++            redirectTarget = null;
++        } else {
++            List<String> addresses = getMasterAddresses();
++            target = addresses.get(Math.abs(masterIndex.get()) % addresses.size());
++        }
++        LOGGER.info("Connecting to master at " + target + "...");
++        String[] serverParts = target.split(":");
 +        bootstrap.connectTo(serverParts[0], Integer.parseInt(serverParts[1])).addListener(future -> {
 +            if (future.cause() != null) {
-+                CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS).execute(this::connect);
++                masterIndex.incrementAndGet();
++                CompletableFuture.delayedExecutor(500, TimeUnit.MILLISECONDS).execute(this::connect);
 +            }
 +        });
 +    }
@@ -212,6 +234,7 @@ index 0000000000000000000000000000000000000000..784ed3647536dae2ea02494aca8a9e68
 +    @Override
 +    public void channelInactive(ChannelHandlerContext ctx) {
 +        channelActive = false;
++        masterIndex.incrementAndGet();
 +        LOGGER.info("Lost connection to " + ((SocketChannel) ctx.channel()).remoteAddress());
 +        connect();
 +    }
@@ -266,5 +289,12 @@ index 0000000000000000000000000000000000000000..784ed3647536dae2ea02494aca8a9e68
 +        server.setAverageTickTime(message.averageTickTime);
 +        server.setTps(message.tps);
 +        server.setLastAlive(System.currentTimeMillis());
++    }
++
++    @Override
++    public void handle(RedirectToLeaderMessage message) {
++        LOGGER.info("Redirected to leader at " + message.leaderHost + ":" + message.leaderPort);
++        redirectTarget = message.leaderHost + ":" + message.leaderPort;
++        // channelInactive will fire next and call connect() which uses redirectTarget
 +    }
 +}
