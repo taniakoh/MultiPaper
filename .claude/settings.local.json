@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(head -20 grep -n \"sendReply\\\\|public.*send\" \"C:\\\\Users\\\\tanta\\\\Downloads\\\\Code\\\\MultiPaper\\\\MultiPaper-Master\\\\src\\\\main\\\\java\\\\puregero\\\\multipaper\\\\server\\\\ServerConnection.java\")",
+      "Bash(/dev/null ls:*)",
+      "Bash(./gradlew :MultiPaper-Master:compileJava --no-daemon)",
+      "Bash(java -version)",
+      "Bash(echo \"JAVA_HOME=$JAVA_HOME\")",
+      "Bash(./gradlew :MultiPaper-Master:compileJava --no-daemon -Porg.gradle.java.installations.auto-download=false)",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-21\" ./gradlew :MultiPaper-Master:compileJava --no-daemon -Porg.gradle.java.installations.paths=\"/c/Program Files/Java/jdk-21\")",
+      "Bash(JAVA_HOME=\"/c/Program Files/Java/jdk-21\" ./gradlew :MultiPaper-Master:compileJava --no-daemon -Porg.gradle.java.installations.paths=\"/c/Program Files/Java/jdk-21\" --info)",
+      "Bash(\"C:\\\\Users\\\\tanta\\\\Downloads\\\\Code\\\\MultiPaper\\\\gradle.properties\":*)"
+    ]
+  }
+}

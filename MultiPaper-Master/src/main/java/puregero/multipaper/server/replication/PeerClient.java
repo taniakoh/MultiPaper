@@ -1,5 +1,6 @@
 package puregero.multipaper.server.replication;
 
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.SocketChannel;
 import puregero.multipaper.mastermessagingprotocol.MessageBootstrap;
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit;
  * Sends {@link LeaderBoundMessage}s (e.g. election tokens, heartbeats)
  * and receives {@link PeerBoundMessage}s (e.g. replication, welcome, full sync).
  */
+@ChannelHandler.Sharable
 public class PeerClient extends PeerBoundMessageHandler {
 
     private final ReplicationConfig.PeerEntry peer;
