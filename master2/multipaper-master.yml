@@ -1,0 +1,12 @@
+replication:
+  enabled: true
+  my-id: "master-2"
+  my-host: "localhost"
+  my-port: 35355
+  peers:
+    - id: "master-1"
+      host: "localhost"
+      port: 35354
+  heartbeat-interval-ms: 2000
+  heartbeat-timeout-ms: 8000
+  initial-role-timeout-ms: 5000
