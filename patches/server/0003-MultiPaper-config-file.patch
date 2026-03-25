@@ -171,15 +171,6 @@ index 0000000000000000000000000000000000000000..d9ae084270c4259371e84246dbc68841
 +        // have a unique name.
 +        // """)
 +        public String myName = "server" + Double.toString(Math.random()).substring(2, 7);
-+
-+        // MultiPaper master replication
-+        public boolean replicationEnabled = false;
-+        public java.util.List<MasterEntry> masters = new java.util.ArrayList<>();
-+
-+        public class MasterEntry extends ConfigurationPart {
-+            public String id = "";
-+            public String host = "localhost:35353";
-+        }
 +    }
 +
 +    public PeerConnection peerConnection;

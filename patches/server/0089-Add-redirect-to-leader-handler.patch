@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Tania Koh Tze Ern <taniakohtzeern@gmail.com>
+Date: Tue Mar 25 00:00:00 2026 +0800
+Subject: [PATCH] Add redirect to leader handler
+
+
+diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+index 0000000000000000000000000000000000000000..0000000000000000000000000000000000000000 100644
+--- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
++++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
+@@ -484,5 +484,16 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+         } catch (IOException e) {
+             e.printStackTrace();
+         }
+     }
++
++    @Override
++    public void handle(RedirectToLeaderMessage message) {
++        LOGGER.info("Redirecting to leader at " + message.leaderHost + ":" + message.leaderPort);
++        bootstrap.connectTo(message.leaderHost, message.leaderPort).addListener(future -> {
++            if (future.cause() != null) {
++                future.cause().printStackTrace();
++            }
++        });
++    }
+ }
