@@ -1,19 +1,17 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: Tania Koh Tze Ern <taniakohtzeern@gmail.com>
-Date: Tue Mar 25 00:00:00 2026 +0800
+From: taniakoh <taniakohtzeern@gmail.com>
+Date: Wed, 25 Mar 2026 19:05:14 +0800
 Subject: [PATCH] Add redirect to leader handler
 
 
 diff --git a/src/main/java/puregero/multipaper/MultiPaperConnection.java b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-index 0000000000000000000000000000000000000000..0000000000000000000000000000000000000000 100644
+index 617098f160c0460509e5b109c25f4b5bb3faa0aa..6c63796e86e4e88cd89b1f33e001fabf3f6b6b29 100644
 --- a/src/main/java/puregero/multipaper/MultiPaperConnection.java
 +++ b/src/main/java/puregero/multipaper/MultiPaperConnection.java
-@@ -484,5 +484,16 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
-         } catch (IOException e) {
-             e.printStackTrace();
-         }
+@@ -441,6 +441,16 @@ public class MultiPaperConnection extends ServerBoundMessageHandler {
+         });
      }
-+
+ 
 +    @Override
 +    public void handle(RedirectToLeaderMessage message) {
 +        LOGGER.info("Redirecting to leader at " + message.leaderHost + ":" + message.leaderPort);
@@ -23,4 +21,7 @@ index 0000000000000000000000000000000000000000..00000000000000000000000000000000
 +            }
 +        });
 +    }
- }
++
+     @Override
+     public void handle(ShutdownMessage message) {
+         Bukkit.shutdown();
