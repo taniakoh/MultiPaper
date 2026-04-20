@@ -1,22 +1,20 @@
 package puregero.multipaper.server.replication;
 
-import puregero.multipaper.server.MultiPaperServer;
-import puregero.multipaper.server.replication.messages.PeerElectionMessage;
+import puregero.multipaper.server.replication.messages.LeaderBoundMessage;
+import puregero.multipaper.server.replication.messages.PeerBoundMessage;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Manages all outbound {@link PeerClient} connections (one per configured peer).
- * Also provides ring-election routing utilities.
  */
 public class PeerConnectionManager {
 
     private static final List<PeerClient> clients = new CopyOnWriteArrayList<>();
     private static final Map<String, PeerClient> clientMap = new ConcurrentHashMap<>();
-
-    private static volatile boolean mcServerStarted = false;
 
     public static void connectToAllPeers(List<ReplicationConfig.PeerEntry> peers) {
         for (ReplicationConfig.PeerEntry peer : peers) {
@@ -27,50 +25,46 @@ public class PeerConnectionManager {
     }
 
     /**
-     * Called when this node wins election.  Starts the Minecraft server listener
-     * if it hasn't been started yet.
+     * Send a PeerBoundMessage to a specific peer. Prefers the inbound PeerConnection channel
+     * (peer connected inward to us); falls back to our outbound PeerClient channel.
      */
-    public static synchronized void onBecomeLeader() {
-        if (mcServerStarted) return;
-        mcServerStarted = true;
-        ReplicationConfig config = ReplicationConfig.get();
-        String host = (config.myHost.equals("0.0.0.0") || config.myHost.isEmpty()) ? null : config.myHost;
-        System.out.println("[Replication] Promoting to leader — starting Minecraft listener on "
-                + (host == null ? "0.0.0.0" : host) + ":" + config.myPort);
-        new MultiPaperServer(host, config.myPort);
+    public static void sendToPeer(String peerId, PeerBoundMessage message) {
+        PeerConnection inbound = PeerConnection.getPeers().get(peerId);
+        if (inbound != null) {
+            inbound.send(message);
+            return;
+        }
+        PeerClient outbound = clientMap.get(peerId);
+        if (outbound != null && outbound.isConnected()) {
+            // Can't send PeerBoundMessage on outbound channel — wrong direction.
+            // The PeerClient sends LeaderBoundMessages to the peer's PeerServer.
+            // If the inbound channel isn't established yet, we can't reach the peer this way.
+            System.err.println("[Replication] No inbound channel to peer " + peerId + " for PeerBoundMessage");
+        }
     }
 
     /**
-     * Send election message to the next available peer in lexicographic ring order.
-     * Returns true if sent successfully, false if no peers are reachable.
+     * Send a LeaderBoundMessage to a specific peer via the outbound PeerClient connection.
      */
-    public static boolean sendElectionToNextInRing(PeerElectionMessage message) {
-        List<String> ring = getRingOrder();
-        String myId = ReplicationConfig.get().myId;
-        int myIndex = ring.indexOf(myId);
-
-        for (int i = 1; i < ring.size(); i++) {
-            String nextId = ring.get((myIndex + i) % ring.size());
-            if (nextId.equals(myId)) continue;
-            PeerClient client = clientMap.get(nextId);
-            if (client != null && client.isConnected()) {
-                client.sendLeaderBound(message);
-                return true;
-            }
+    public static void sendLeaderBoundToPeer(String peerId, LeaderBoundMessage message) {
+        PeerClient client = clientMap.get(peerId);
+        if (client != null && client.isConnected()) {
+            client.sendLeaderBound(message);
         }
-        return false;
     }
 
     /**
-     * Returns all peer IDs (including this node) sorted lexicographically — the ring order.
+     * Broadcast a PeerBoundMessage to all peers that have an inbound connection to us.
      */
-    public static List<String> getRingOrder() {
-        List<String> ring = new ArrayList<>();
-        ring.add(ReplicationConfig.get().myId);
-        for (ReplicationConfig.PeerEntry peer : ReplicationConfig.get().peers) {
-            ring.add(peer.id);
-        }
-        Collections.sort(ring);
-        return ring;
+    public static void broadcastToAll(PeerBoundMessage message) {
+        PeerConnection.broadcastToAll(message);
+    }
+
+    public static List<PeerClient> getClients() {
+        return clients;
+    }
+
+    public static PeerClient getClient(String peerId) {
+        return clientMap.get(peerId);
     }
 }

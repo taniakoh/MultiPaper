@@ -11,8 +11,9 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * Handles an incoming peer connection on the leader's PeerServer.
+ * Handles an incoming peer connection on this master's PeerServer.
  * Receives {@link LeaderBoundMessage}s and sends {@link PeerBoundMessage}s.
+ * In the leaderless model, any master can have peers connect inbound.
  */
 public class PeerConnection extends LeaderBoundMessageHandler {
 
@@ -20,7 +21,6 @@ public class PeerConnection extends LeaderBoundMessageHandler {
     private String peerId;
 
     private static final Map<String, PeerConnection> peers = new ConcurrentHashMap<>();
-    private static final List<PeerConnection> standbyConnections = new CopyOnWriteArrayList<>();
 
     public PeerConnection(SocketChannel channel) {
         this.channel = channel;
@@ -30,16 +30,8 @@ public class PeerConnection extends LeaderBoundMessageHandler {
         channel.writeAndFlush(message);
     }
 
-    public static void broadcastToStandbys(PeerBoundMessage message) {
-        standbyConnections.forEach(c -> c.send(message));
-    }
-
     public static void broadcastToAll(PeerBoundMessage message) {
         peers.values().forEach(c -> c.send(message));
-    }
-
-    public static int getStandbyCount() {
-        return standbyConnections.size();
     }
 
     public static Map<String, PeerConnection> getPeers() {
@@ -50,26 +42,25 @@ public class PeerConnection extends LeaderBoundMessageHandler {
     public void channelInactive(ChannelHandlerContext ctx) {
         if (peerId != null) {
             peers.remove(peerId);
-            standbyConnections.remove(this);
+            PeerMembershipTracker.get().markDead(peerId);
             System.out.println("[Replication] Peer disconnected: " + peerId);
         }
     }
 
     @Override
     public void handle(PeerHelloMessage message) {
+        if (message.protocolVersion != PeerHelloMessage.PROTOCOL_VERSION) {
+            System.err.println("[Replication] Protocol version mismatch with connecting peer: expected="
+                    + PeerHelloMessage.PROTOCOL_VERSION + " got=" + message.protocolVersion + ". Closing connection.");
+            channel.close();
+            return;
+        }
         this.peerId = message.peerId;
         peers.put(peerId, this);
+        PeerMembershipTracker.get().markAlive(peerId);
         System.out.println("[Replication] Peer connected: " + peerId);
-
-        if (MasterRole.isLeader()) {
-            standbyConnections.add(this);
-            ReplicationConfig config = ReplicationConfig.get();
-            send(new PeerWelcomeMessage(config.myId, config.myHost, config.myPort));
-        } else if (MasterRole.getLeaderId() != null) {
-            // Relay known leader info
-            send(new PeerWelcomeMessage(MasterRole.getLeaderId(), MasterRole.getLeaderHost(), MasterRole.getLeaderPort()));
-        }
-        // else: still starting up — don't send anything yet
+        ReplicationConfig config = ReplicationConfig.get();
+        send(new PeerWelcomeMessage(config.myId, config.myHost, config.myPort));
     }
 
     @Override
@@ -85,7 +76,23 @@ public class PeerConnection extends LeaderBoundMessageHandler {
 
     @Override
     public void handle(PeerElectionMessage message) {
-        ElectionManager.onElectionMessage(message.candidateId);
+        // no-op: election removed in favour of leaderless quorum
+    }
+
+    @Override
+    public void handle(PeerWriteAckMessage message) {
+        QuorumWriteCoordinator.get().onWriteAck(peerId, message.correlationId, message.success);
+    }
+
+    @Override
+    public void handle(PeerPromiseMessage message) {
+        ConsensusCoordinator.get().onPromise(peerId, message.roundId, message.promised,
+                message.acceptedBallotLamport, message.acceptedBallotMasterId, message.acceptedValue);
+    }
+
+    @Override
+    public void handle(PeerAcceptAckMessage message) {
+        ConsensusCoordinator.get().onAcceptAck(peerId, message.roundId, message.accepted);
     }
 
     // -------------------------------------------------------------------------

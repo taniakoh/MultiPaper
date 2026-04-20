@@ -15,5 +15,10 @@ public abstract class PeerBoundMessageHandler extends MessageHandler<PeerBoundMe
     public abstract void handle(PeerFullSyncFileMessage message);
     public abstract void handle(PeerFullSyncCompleteMessage message);
     public abstract void handle(PeerHeartbeatAckMessage message);
-    public abstract void handle(PeerElectedMessage message);
+    public abstract void handle(PeerElectedMessage message);     // no-op, kept for wire-ID stability
+    // Paxos consensus messages
+    public abstract void handle(PeerPrepareMessage message);
+    public abstract void handle(PeerAcceptMessage message);
+    public abstract void handle(PeerCommitMessage message);
+    public abstract void handle(PeerLeaseExpiredMessage message);
 }

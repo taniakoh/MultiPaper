@@ -4,8 +4,9 @@ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
 import puregero.multipaper.server.handlers.*;
 
 /**
- * Applies replicated write operations on a standby master.
+ * Applies replicated write operations received from a coordinator master.
  * Only write-type messages are dispatched; all other messages are no-ops.
+ * In the leaderless model all masters can receive these, not just standbys.
  */
 public class StandbyWriteDispatcher extends MasterBoundMessageHandler {
 

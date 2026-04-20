@@ -7,8 +7,8 @@ import puregero.multipaper.mastermessagingprotocol.messages.masterbound.MasterBo
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundProtocol;
 import puregero.multipaper.server.proxy.ProxyServer;
-import puregero.multipaper.server.replication.MasterRole;
 import puregero.multipaper.server.replication.PeerConnectionManager;
+import puregero.multipaper.server.replication.PeerMembershipTracker;
 import puregero.multipaper.server.replication.PeerServer;
 import puregero.multipaper.server.replication.ReplicationConfig;
 import puregero.multipaper.server.util.LogToFile;
@@ -66,30 +66,15 @@ public class MultiPaperServer extends MessageBootstrap<MasterBoundMessage, Serve
             if (address != null) config.myHost = address;
             config.myPort = port;
 
+            PeerMembershipTracker.init(config);
             int peerPort = config.getEffectivePeerPort();
             new PeerServer(peerPort);
             PeerConnectionManager.connectToAllPeers(config.peers);
-
-            System.out.println("[Replication] Waiting up to " + config.initialRoleTimeoutMs
-                    + "ms for role determination...");
-            boolean gotRole = MasterRole.initialRoleLatch.await(
-                    config.initialRoleTimeoutMs, TimeUnit.MILLISECONDS);
-            if (!gotRole) {
-                System.out.println("[Replication] No existing leader found — self-electing.");
-                MasterRole.becomeLeader();
-            }
-
-            if (MasterRole.isLeader()) {
-                // Start MC server listener immediately (we are the leader)
-                new MultiPaperServer(address, port);
-            } else {
-                // Standby: still start the listener so we can redirect servers to the leader
-                System.out.println("[Replication] Running as STANDBY. Redirecting Minecraft server connections to leader.");
-                new MultiPaperServer(address, port);
-            }
-        } else {
-            new MultiPaperServer(address, port);
+            System.out.println("[Replication] Active-active mode: " + config.myId
+                    + " accepting connections (quorum=" + PeerMembershipTracker.get().quorumSize()
+                    + "/" + PeerMembershipTracker.get().totalKnown() + ")");
         }
+        new MultiPaperServer(address, port);
 
         if (new CommandLineInput().run()) {
             System.exit(0);

@@ -12,5 +12,9 @@ public abstract class LeaderBoundMessageHandler extends MessageHandler<LeaderBou
     public abstract void handle(PeerHelloMessage message);
     public abstract void handle(PeerRequestFullSyncMessage message);
     public abstract void handle(PeerHeartbeatMessage message);
-    public abstract void handle(PeerElectionMessage message);
+    public abstract void handle(PeerElectionMessage message);    // no-op, kept for wire-ID stability
+    public abstract void handle(PeerWriteAckMessage message);
+    // Paxos consensus messages
+    public abstract void handle(PeerPromiseMessage message);
+    public abstract void handle(PeerAcceptAckMessage message);
 }

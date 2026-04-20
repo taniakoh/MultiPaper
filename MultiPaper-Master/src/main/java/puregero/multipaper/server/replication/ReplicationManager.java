@@ -11,11 +11,11 @@ public class ReplicationManager {
 
     private static final MasterBoundProtocol PROTOCOL = new MasterBoundProtocol();
 
-    public static void replicateToStandbys(MasterBoundMessage message) {
+    public static void replicateToAll(MasterBoundMessage message) {
         if (!ReplicationConfig.isEnabled()) return;
-        if (PeerConnection.getStandbyCount() == 0) return;
+        if (PeerConnection.getPeers().isEmpty()) return;
         byte[] encoded = encodeMessage(message);
-        PeerConnection.broadcastToStandbys(new PeerReplicateMessage(encoded));
+        PeerConnection.broadcastToAll(new PeerReplicateMessage(encoded, -1L));
     }
 
     public static byte[] encodeMessage(MasterBoundMessage message) {

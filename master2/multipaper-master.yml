@@ -9,4 +9,8 @@ replication:
       port: 35354
   heartbeat-interval-ms: 2000
   heartbeat-timeout-ms: 8000
-  initial-role-timeout-ms: 5000
+  lease-duration-ms: 30000
+  lease-renewal-threshold-ms: 10000
+  quorum-timeout-ms: 3000
+  min-quorum-size: 0
+  strict-write-mode: false

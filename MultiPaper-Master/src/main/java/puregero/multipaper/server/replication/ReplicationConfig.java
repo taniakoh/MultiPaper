@@ -19,7 +19,11 @@ public class ReplicationConfig {
     public List<PeerEntry> peers = new ArrayList<>();
     public long heartbeatIntervalMs = 2000;
     public long heartbeatTimeoutMs = 8000;
-    public long initialRoleTimeoutMs = 5000;
+    public long leaseDurationMs = 30000;
+    public long leaseRenewalThresholdMs = 10000;
+    public long quorumTimeoutMs = 3000;
+    public int minQuorumSize = 0;
+    public boolean strictWriteMode = false; // true = block reply until quorum; false = optimistic
 
     public static class PeerEntry {
         public String id = "";
@@ -58,8 +62,16 @@ public class ReplicationConfig {
                         config.heartbeatIntervalMs = ((Number) repl.get("heartbeat-interval-ms")).longValue();
                     if (repl.containsKey("heartbeat-timeout-ms"))
                         config.heartbeatTimeoutMs = ((Number) repl.get("heartbeat-timeout-ms")).longValue();
-                    if (repl.containsKey("initial-role-timeout-ms"))
-                        config.initialRoleTimeoutMs = ((Number) repl.get("initial-role-timeout-ms")).longValue();
+                    if (repl.containsKey("lease-duration-ms"))
+                        config.leaseDurationMs = ((Number) repl.get("lease-duration-ms")).longValue();
+                    if (repl.containsKey("lease-renewal-threshold-ms"))
+                        config.leaseRenewalThresholdMs = ((Number) repl.get("lease-renewal-threshold-ms")).longValue();
+                    if (repl.containsKey("quorum-timeout-ms"))
+                        config.quorumTimeoutMs = ((Number) repl.get("quorum-timeout-ms")).longValue();
+                    if (repl.containsKey("min-quorum-size"))
+                        config.minQuorumSize = (int) repl.get("min-quorum-size");
+                    if (repl.containsKey("strict-write-mode"))
+                        config.strictWriteMode = (boolean) repl.get("strict-write-mode");
                     if (repl.containsKey("peers")) {
                         List<Map<String, Object>> peerList = (List<Map<String, Object>>) repl.get("peers");
                         for (Map<String, Object> p : peerList) {
@@ -85,7 +97,11 @@ public class ReplicationConfig {
                 pw.println("  peers: []");
                 pw.println("  heartbeat-interval-ms: 2000");
                 pw.println("  heartbeat-timeout-ms: 8000");
-                pw.println("  initial-role-timeout-ms: 5000");
+                pw.println("  lease-duration-ms: 30000");
+                pw.println("  lease-renewal-threshold-ms: 10000");
+                pw.println("  quorum-timeout-ms: 3000");
+                pw.println("  min-quorum-size: 0  # 0 = auto (majority)");
+                pw.println("  strict-write-mode: false  # true = block reply until quorum");
             } catch (IOException e) {
                 System.err.println("[Replication] Failed to write default multipaper-master.yml: " + e.getMessage());
             }

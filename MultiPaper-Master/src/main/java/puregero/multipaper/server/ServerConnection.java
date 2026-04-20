@@ -3,12 +3,11 @@ package puregero.multipaper.server;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.socket.SocketChannel;
 import puregero.multipaper.mastermessagingprotocol.messages.masterbound.*;
-import puregero.multipaper.mastermessagingprotocol.messages.serverbound.RedirectToLeaderMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ServerBoundMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.SetSecretMessage;
 import puregero.multipaper.mastermessagingprotocol.messages.serverbound.ShutdownMessage;
 import puregero.multipaper.server.handlers.*;
-import puregero.multipaper.server.replication.MasterRole;
+import puregero.multipaper.server.replication.QuorumWriteCoordinator;
 import puregero.multipaper.server.replication.ReplicationConfig;
 import puregero.multipaper.server.replication.ReplicationManager;
 
@@ -106,16 +105,6 @@ public class ServerConnection extends MasterBoundMessageHandler {
 
     @Override
     public void handle(HelloMessage message) {
-        if (ReplicationConfig.isEnabled() && !MasterRole.isLeader()) {
-            String leaderHost = MasterRole.getLeaderHost();
-            int leaderPort = MasterRole.getLeaderPort();
-            if (leaderHost != null && !leaderHost.isEmpty()) {
-                send(new RedirectToLeaderMessage(leaderHost, leaderPort));
-            }
-            channel.close();
-            return;
-        }
-
         name = message.name;
         host = ((InetSocketAddress) getAddress()).getAddress().getHostAddress();
         uuid = message.serverUuid;
@@ -145,8 +134,19 @@ public class ServerConnection extends MasterBoundMessageHandler {
     @Override
     public boolean onMessage(MasterBoundMessage message) {
         lastPing = System.currentTimeMillis();
-        if (ReplicationConfig.isEnabled() && MasterRole.isLeader() && isWriteMessage(message)) {
-            ReplicationManager.replicateToStandbys(message);
+        if (ReplicationConfig.isEnabled() && isWriteMessage(message)) {
+            if (ReplicationConfig.get().strictWriteMode) {
+                // Block handler dispatch until quorum is reached; reply happens after handler runs
+                QuorumWriteCoordinator.get().replicateAndAwaitQuorum(message)
+                        .thenAccept(ok -> {
+                            if (!ok) System.err.println("[Replication] Quorum not reached for write " + message.getClass().getSimpleName());
+                        });
+            } else {
+                QuorumWriteCoordinator.get().replicateAndAwaitQuorum(message)
+                        .thenAccept(ok -> {
+                            if (!ok) System.err.println("[Replication] Quorum not reached for write " + message.getClass().getSimpleName() + " (optimistic — write still applied locally)");
+                        });
+            }
         }
         return false;
     }

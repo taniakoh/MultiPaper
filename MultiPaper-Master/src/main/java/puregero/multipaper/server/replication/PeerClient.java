@@ -30,6 +30,7 @@ public class PeerClient extends PeerBoundMessageHandler {
     /** Buffer for PeerReplicateMessage received during initial full sync */
     private final Queue<byte[]> replicateBuffer = new LinkedList<>();
     private volatile boolean syncing = false;
+    private volatile boolean needsSync = true; // request full sync from first peer that welcomes us
 
     private final MessageBootstrap<PeerBoundMessage, LeaderBoundMessage> bootstrap;
 
@@ -82,17 +83,9 @@ public class PeerClient extends PeerBoundMessageHandler {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) {
-        boolean wasActive = channelActive;
         channelActive = false;
         System.out.println("[Replication] Lost connection to peer " + peer.id);
-
-        // If this was our leader, trigger election
-        if (wasActive && peer.id.equals(MasterRole.getLeaderId())
-                && MasterRole.getState() != MasterRole.State.LEADER) {
-            System.out.println("[Replication] Leader " + peer.id + " disconnected, starting election");
-            ElectionManager.startElection();
-        }
-
+        PeerMembershipTracker.get().markDead(peer.id);
         connect();
     }
 
@@ -102,13 +95,10 @@ public class PeerClient extends PeerBoundMessageHandler {
             if (!channelActive) return;
             long elapsed = System.currentTimeMillis() - lastAckReceived;
             if (elapsed > config.heartbeatTimeoutMs) {
-                System.out.println("[Replication] Heartbeat timeout to " + peer.id
-                        + " (" + elapsed + "ms), triggering election");
+                System.out.println("[Replication] Heartbeat timeout to " + peer.id + " (" + elapsed + "ms)");
                 channelActive = false;
+                PeerMembershipTracker.get().markDead(peer.id);
                 if (channel != null) channel.close();
-                if (peer.id.equals(MasterRole.getLeaderId())) {
-                    ElectionManager.startElection();
-                }
             } else {
                 channel.writeAndFlush(new PeerHeartbeatMessage());
             }
@@ -121,12 +111,10 @@ public class PeerClient extends PeerBoundMessageHandler {
 
     @Override
     public void handle(PeerWelcomeMessage message) {
-        System.out.println("[Replication] Welcome from " + peer.id
-                + ": leader=" + message.leaderId + " at " + message.leaderHost + ":" + message.leaderPort);
-        boolean wasStarting = MasterRole.getState() == MasterRole.State.STARTING;
-        MasterRole.becomeStandby(message.leaderId, message.leaderHost, message.leaderPort);
-        if (wasStarting && message.leaderId.equals(peer.id)) {
-            // This peer IS the leader — request full sync
+        System.out.println("[Replication] Handshake ACK from " + peer.id);
+        PeerMembershipTracker.get().markAlive(peer.id);
+        if (needsSync) {
+            needsSync = false;
             syncing = true;
             channel.writeAndFlush(new PeerRequestFullSyncMessage(ReplicationConfig.get().myId));
         }
@@ -140,6 +128,10 @@ public class PeerClient extends PeerBoundMessageHandler {
             }
         } else {
             StandbyWriteDispatcher.dispatch(message.rawBytes);
+        }
+        // Send ACK only for quorum-tracked writes (correlationId >= 0)
+        if (message.correlationId >= 0) {
+            channel.writeAndFlush(new PeerWriteAckMessage(message.correlationId, true));
         }
     }
 
@@ -175,10 +167,33 @@ public class PeerClient extends PeerBoundMessageHandler {
     @Override
     public void handle(PeerHeartbeatAckMessage message) {
         lastAckReceived = System.currentTimeMillis();
+        PeerMembershipTracker.get().markAlive(peer.id);
     }
 
     @Override
     public void handle(PeerElectedMessage message) {
-        ElectionManager.onElectedMessage(message.leaderId, message.leaderHost, message.leaderPort);
+        // no-op: election removed in favour of leaderless quorum
+    }
+
+    @Override
+    public void handle(PeerPrepareMessage message) {
+        ConsensusCoordinator.get().onPrepare(message.chunkKey,
+                message.ballotLamport, message.ballotMasterId, message.roundId, peer.id);
+    }
+
+    @Override
+    public void handle(PeerAcceptMessage message) {
+        ConsensusCoordinator.get().onAccept(message.chunkKey,
+                message.ballotLamport, message.ballotMasterId, message.serverOwner, message.roundId, peer.id);
+    }
+
+    @Override
+    public void handle(PeerCommitMessage message) {
+        ConsensusCoordinator.get().onCommit(message.chunkKey, message.serverOwner, message.leaseExpiry);
+    }
+
+    @Override
+    public void handle(PeerLeaseExpiredMessage message) {
+        LeaseManager.get().applyRemoteExpiry(message.chunkKey);
     }
 }
